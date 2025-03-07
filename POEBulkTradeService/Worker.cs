@@ -28,10 +28,10 @@ public class Worker : BackgroundService
                 // Define the search parameters
                 string leagueId = "Standard";
                 string haveCurrency = "chaos";
-                string wantCurrency = "divine";
+                string wantCurrency = Essence.EssenceOfDelirium.GetEnumMemberValue();
                 int minimum = 10;
-
-                // Execute the bulk trade search using the service layer
+                _logger.LogInformation("League: {leagueId}, Have: {haveCurrency}, Want: {wantCurrency}, Minimum: {minimum}", 
+                    leagueId, haveCurrency, wantCurrency, minimum);                // Execute the bulk trade search using the service layer
                 var result = await _tradeService.SearchCurrencyExchangeAsync(
                     leagueId, haveCurrency, wantCurrency, minimum);
 
