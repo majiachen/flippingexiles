@@ -18,62 +18,59 @@ public class Worker : BackgroundService
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+{
+    int backoffDelay = 300000; // Default wait time for rate limit hit (300 sec)
+
+    while (!stoppingToken.IsCancellationRequested)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+
+        try
         {
-            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+            // Normal rate limiting
+            await RateLimiter.WaitAsync(stoppingToken);
 
-            try
+            // Define the search parameters
+            string leagueId = "Standard";
+            string[] haveCurrencies = new[] { "divine", "chaos" };
+            string wantCurrency = Essence.EssenceOfDelirium.GetEnumMemberValue();
+            int minimum = 10;
+
+            _logger.LogInformation("League: {leagueId}, Have: {haveCurrency}, Want: {wantCurrency}, Minimum: {minimum}", 
+                leagueId, haveCurrencies, wantCurrency, minimum);
+
+            // Execute the API request
+            var response = await _tradeService.SearchCurrencyExchangeAsync(leagueId, haveCurrencies, wantCurrency, minimum);
+
+            // Reset backoff delay if request was successful
+            backoffDelay = 10000;
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("429"))
+        {
+            // Rate limit hit! Apply a backoff delay
+            _logger.LogWarning("Rate limit exceeded! Applying backoff...");
+
+            // Try to get the `Retry-After` header from response
+            int waitTime = backoffDelay; // Default backoff
+
+            if (ex.Data.Contains("Retry-After"))
             {
-                // Define the search parameters
-                string leagueId = "Standard";
-                string haveCurrency = "chaos";
-                string wantCurrency = Essence.EssenceOfDelirium.GetEnumMemberValue();
-                int minimum = 10;
-                _logger.LogInformation("League: {leagueId}, Have: {haveCurrency}, Want: {wantCurrency}, Minimum: {minimum}", 
-                    leagueId, haveCurrency, wantCurrency, minimum);                // Execute the bulk trade search using the service layer
-                var result = await _tradeService.SearchCurrencyExchangeAsync(
-                    leagueId, haveCurrency, wantCurrency, minimum);
-
-                // Log the results
-                _logger.LogInformation("Found {total} results", result.total);
-                
-                // Only log a summary of the results to avoid excessive logging
-                if (result.result?.Values != null && result.result.Values.Any())
-                {
-                    _logger.LogInformation("Top 5 exchange rates:");
-                    
-                    foreach (var tradeResult in result.result.Values.Take(5))
-                    {
-                        // Extract the exchange rate information
-                        var exchangeInfo = tradeResult.listing?.offers?.FirstOrDefault()?.exchange;
-                        var itemInfo = tradeResult.listing?.offers?.FirstOrDefault()?.item;
-                        
-                        if (exchangeInfo != null && itemInfo != null)
-                        {
-                            _logger.LogInformation(
-                                "Seller: {seller}, Rate: {amount} {currency} for {itemAmount} {itemCurrency}, Stock: {stock}",
-                                tradeResult.listing.account.name,
-                                exchangeInfo.amount,
-                                exchangeInfo.currency,
-                                itemInfo.amount,
-                                itemInfo.currency,
-                                itemInfo.stock);
-                        }
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No results found");
-                }
+                waitTime = (int)ex.Data["Retry-After"] * 1000; // Convert to milliseconds
+                _logger.LogWarning("⏳ API says wait {WaitTime} ms", waitTime);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogError(ex, "Error executing bulk trade search");
+                _logger.LogWarning("No Retry-After header found. Using backoff: {WaitTime} ms", waitTime);
+                backoffDelay = Math.Min(backoffDelay * 2, 3000000); // Exponential backoff (max 3000 sec)
             }
 
-            // Wait for 5 minutes before running again
-            await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
+            await Task.Delay(waitTime, stoppingToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error executing bulk trade search");
         }
     }
+}
+
 }

@@ -9,18 +9,12 @@ public class PathOfExileApiClient : ITradeApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly ILogger<PathOfExileApiClient> _logger;
-    private readonly RateLimiter _rateLimiter;
 
-    public PathOfExileApiClient(
-        HttpClient httpClient, 
-        ILogger<PathOfExileApiClient> logger,
-        RateLimiter rateLimiter)
+    public PathOfExileApiClient(HttpClient httpClient, ILogger<PathOfExileApiClient> logger)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _rateLimiter = rateLimiter ?? throw new ArgumentNullException(nameof(rateLimiter));
 
-        // Configure HttpClient
         _httpClient.BaseAddress = new Uri("https://www.pathofexile.com");
         ConfigureHttpClientHeaders();
     }
@@ -38,28 +32,30 @@ public class PathOfExileApiClient : ITradeApiClient
         _httpClient.DefaultRequestHeaders.AcceptCharset.Add(new StringWithQualityHeaderValue("utf-8"));
     }
 
-    public async Task<TradeResponse> ExecuteBulkSearchAsync(string leagueId, string haveCurrency, string wantCurrency, int minimum)
+    public async Task<TradeResponse> ExecuteBulkSearchAsync(string leagueId, string[] haveCurrencies, string wantCurrency, int minimum)
     {
         _logger.LogInformation("Executing bulk trade search for league: {LeagueId}", leagueId);
-        _logger.LogDebug("Have Currency: {HaveCurrency}, Want Currency: {WantCurrency}, Minimum: {Minimum}", 
-            haveCurrency, wantCurrency, minimum);
+        _logger.LogDebug("Have Currencies: {HaveCurrencies}, Want Currency: {WantCurrency}, Minimum: {Minimum}", 
+            string.Join(", ", haveCurrencies), wantCurrency, minimum);
 
         try
         {
-            // Apply rate limiting
-            await _rateLimiter.WaitAsync();
-
             var url = $"/api/trade/exchange/{leagueId}";
-            var requestBody = BuildTradeRequest(haveCurrency, wantCurrency, minimum);
+            var requestBody = BuildTradeRequest(haveCurrencies, wantCurrency, minimum);
             var jsonContent = JsonConvert.SerializeObject(requestBody);
             var httpContent = new StringContent(jsonContent, Encoding.UTF8, "application/json");
 
-            using var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Content = httpContent;
-            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = httpContent
+            };
 
+            using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
             LogResponseHeaders(response);
+
+            // **Update the rate limiter dynamically**
+            UpdateRateLimit(response);
 
             return await DeserializeResponseAsync<TradeResponse>(response);
         }
@@ -70,35 +66,38 @@ public class PathOfExileApiClient : ITradeApiClient
         }
     }
 
-    private TradeRequest BuildTradeRequest(string haveCurrency, string wantCurrency, int minimum)
+    private void UpdateRateLimit(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("X-Rate-Limit-Ip", out var limitValues))
+        {
+            var limitParts = limitValues.First().Split(',')[^1].Split(':').Select(int.Parse).ToArray();
+            int maxRequests = limitParts[0]; // Max requests
+            int windowSeconds = limitParts[1]; // Time window
+
+            RateLimiter.UpdateRateLimits(maxRequests, windowSeconds);
+        }
+    }
+
+    private TradeRequest BuildTradeRequest(string[] haveCurrencies, string wantCurrency, int minimum)
     {
         return new TradeRequest
         {
             query = new TradeQuery
             {
                 status = new TradeStatus { option = "online" },
-                have = new[] { haveCurrency },
+                have = haveCurrencies, // Supports multiple have currencies
                 want = new[] { wantCurrency },
                 minimum = minimum
             }
         };
     }
 
+
     private void LogResponseHeaders(HttpResponseMessage response)
     {
         foreach (var header in response.Headers)
         {
             _logger.LogDebug("Header: {Key} = {Value}", header.Key, string.Join(", ", header.Value));
-        }
-
-        if (response.Content.Headers.TryGetValues("Content-Type", out var contentTypes))
-        {
-            _logger.LogDebug("Content-Type: {ContentType}", string.Join(", ", contentTypes));
-        }
-
-        if (response.Content.Headers.TryGetValues("Content-Encoding", out var contentEncodings))
-        {
-            _logger.LogDebug("Content-Encoding: {ContentEncoding}", string.Join(", ", contentEncodings));
         }
     }
 
@@ -111,8 +110,7 @@ public class PathOfExileApiClient : ITradeApiClient
         var rawResponse = await reader.ReadToEndAsync();
         _logger.LogDebug("Raw API Response: {RawResponse}", rawResponse);
 
-        var result = JsonConvert.DeserializeObject<T>(rawResponse);
-        return result;
+        return JsonConvert.DeserializeObject<T>(rawResponse);
     }
 
     private Stream GetDecompressedStream(HttpResponseMessage response, Stream responseStream)

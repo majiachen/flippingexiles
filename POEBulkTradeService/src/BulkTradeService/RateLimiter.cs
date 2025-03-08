@@ -2,57 +2,60 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 
-public class RateLimiter : IDisposable
+public static class RateLimiter
 {
-    private readonly SemaphoreSlim _semaphore;
-    private readonly LinkedList<DateTime> _requestTimes = new();
-    private readonly int _windowSeconds;
-    private bool _disposed;
+    private static int _maxRequests = 30; // Default: 30 requests per 300 sec
+    private static int _windowSeconds = 300; // Default: 300 sec window
+    private static readonly object _lock = new();
+    private static ILogger _logger = null!;
+    private static DateTime _lastRequestTime = DateTime.UtcNow; // Tracks last request time
 
-    public RateLimiter(int maxRequests, int windowSeconds)
+    /// <summary>
+    /// Initializes the logger from Program.cs
+    /// </summary>
+    public static void InitializeLogger(ILogger logger)
     {
-        _semaphore = new SemaphoreSlim(maxRequests, maxRequests);
-        _windowSeconds = windowSeconds;
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    public async Task WaitAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Waits asynchronously until a request can be made within the rate limit.
+    /// </summary>
+    public static async Task WaitAsync(CancellationToken cancellationToken = default)
     {
-        while (!_disposed)
+        int delay;
+        lock (_lock)
         {
-            lock (_requestTimes)
-            {
-                ClearExpiredRequests();
-                if (_requestTimes.Count < _semaphore.CurrentCount)
-                {
-                    _requestTimes.AddLast(DateTime.UtcNow);
-                    return;
-                }
-            }
+            var nextAllowedTime = _lastRequestTime.AddSeconds(_windowSeconds / _maxRequests-3);
+            var waitTime = (int)(nextAllowedTime - DateTime.UtcNow).TotalMilliseconds;
 
-            await Task.Delay(CalculateDelay(), cancellationToken);
+            delay = waitTime > 0 ? waitTime : 0;
+
+            _logger?.LogDebug("Waiting {Delay} ms before next request.", delay);
+            _lastRequestTime = DateTime.UtcNow.AddMilliseconds(delay);
         }
-    }
 
-    private void ClearExpiredRequests()
-    {
-        var cutoff = DateTime.UtcNow.AddSeconds(-_windowSeconds);
-        while (_requestTimes.First?.Value < cutoff)
+        if (delay > 0)
         {
-            _requestTimes.RemoveFirst();
+            await Task.Delay(delay, cancellationToken);
         }
+
+        _logger?.LogDebug("Request allowed at {Time}.", DateTime.UtcNow);
     }
 
-    private int CalculateDelay()
+    /// <summary>
+    /// Updates the rate limit dynamically based on API response headers.
+    /// </summary>
+    public static void UpdateRateLimits(int maxRequests, int windowSeconds)
     {
-        if (_requestTimes.First is null) return 0;
-        var oldest = _requestTimes.First.Value;
-        return (int)(_windowSeconds - (DateTime.UtcNow - oldest).TotalSeconds) * 1000;
-    }
+        lock (_lock)
+        {
+            _maxRequests = maxRequests;
+            _windowSeconds = windowSeconds;
+        }
 
-    public void Dispose()
-    {
-        _disposed = true;
-        _semaphore.Dispose();
+        _logger?.LogInformation("RateLimiter updated: {MaxRequests} requests per {WindowSeconds} seconds", maxRequests, windowSeconds);
     }
 }
