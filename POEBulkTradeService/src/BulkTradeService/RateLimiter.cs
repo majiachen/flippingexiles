@@ -28,7 +28,7 @@ public static class RateLimiter
         int delay;
         lock (_lock)
         {
-            var nextAllowedTime = _lastRequestTime.AddSeconds(_windowSeconds / _maxRequests-3);
+            var nextAllowedTime = _lastRequestTime.AddSeconds(_windowSeconds / _maxRequests + 4);
             var waitTime = (int)(nextAllowedTime - DateTime.UtcNow).TotalMilliseconds;
 
             delay = waitTime > 0 ? waitTime : 0;
