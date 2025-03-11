@@ -50,7 +50,7 @@ public class Worker : BackgroundService
                         await RateLimiter.WaitAsync(stoppingToken);
                         _logger.LogDebug("Rate limiter cleared, requesting trade data for {TradeItem}", item);
 
-                        string leagueId = "Phrecia";
+                        string leagueId = "Standard";
                         string[] haveCurrencies = { "divine", "chaos" };
                         int minimum = 10;
 
