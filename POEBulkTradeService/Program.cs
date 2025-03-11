@@ -4,11 +4,15 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Net.Http;
 using WorkerService1.BulkTradeService;
+using WorkerService1.BulkTradeService.KafkaServices;
 
 var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
-        // Register the Cache singleton
+        // Register Kafka producer
+        services.AddSingleton<KafkaProducerService>();
+
+        // Register Trade-related services
         services.AddSingleton<Cache>();
 
         // **Register HttpClient**

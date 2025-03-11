@@ -9,6 +9,8 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Confluent.Kafka" Version="2.8.0" />
+        <PackageReference Include="Duende.IdentityModel" Version="7.0.0" />
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0"/>
         <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0-preview.1.25080.5" />
         <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />

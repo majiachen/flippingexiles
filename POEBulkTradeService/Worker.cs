@@ -7,16 +7,19 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using WorkerService1.BulkTradeService;
 using WorkerService1.BulkTradeService.Enums;
+using WorkerService1.BulkTradeService.KafkaServices;
 
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
     private readonly ITradeService _tradeService;
+    private readonly KafkaProducerService _kafkaProducer;
 
-    public Worker(ILogger<Worker> logger, ITradeService tradeService)
+    public Worker(ILogger<Worker> logger, ITradeService tradeService, KafkaProducerService kafkaProducer)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _tradeService = tradeService ?? throw new ArgumentNullException(nameof(tradeService));
+        _kafkaProducer = kafkaProducer ?? throw new ArgumentNullException(nameof(kafkaProducer));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -25,81 +28,69 @@ public class Worker : BackgroundService
         {
             _logger.LogDebug("Worker started execution at: {Time}", DateTimeOffset.Now);
 
-            // Retrieve all enum types dynamically
             var tradeItemTypes = GetEnumTypes();
-
             _logger.LogDebug("Discovered {EnumCount} enum types for trading: {EnumTypes}", 
                 tradeItemTypes.Length, string.Join(", ", tradeItemTypes.Select(t => t.Name)));
 
             foreach (var tradeItemType in tradeItemTypes)
             {
                 var items = GetEnumValues(tradeItemType);
+                var topic = GetKafkaTopic(tradeItemType);
 
-                _logger.LogDebug("Processing {ItemCount} trade items from {EnumType}", 
-                    items.Length, tradeItemType.Name);
+                _logger.LogDebug("Processing {ItemCount} trade items from {EnumType}, sending data to Kafka topic '{Topic}'", 
+                    items.Length, tradeItemType.Name, topic);
 
+                var tradeDataBatch = new List<object>();
+                await _kafkaProducer.SendMessageAsync(topic, "trade-data-refresh", tradeDataBatch);
+                _logger.LogDebug("test Trade data sent to Kafka topic '{Topic}' successfully.", topic);
                 foreach (var item in items)
                 {
                     try
                     {
-                        // Wait for rate limit before making request
-                        _logger.LogDebug("Waiting for rate limiter before requesting trade data for {TradeItem}", item);
                         await RateLimiter.WaitAsync(stoppingToken);
-                        _logger.LogDebug("Rate limiter cleared, proceeding with request for {TradeItem}", item);
+                        _logger.LogDebug("Rate limiter cleared, requesting trade data for {TradeItem}", item);
 
-                        // Define the search parameters
-                        string leagueId = "Standard";
-                        string[] haveCurrencies = { "divine", "chaos" }; // Example values
+                        string leagueId = "Phrecia";
+                        string[] haveCurrencies = { "divine", "chaos" };
                         int minimum = 10;
 
                         _logger.LogDebug("Searching for {TradeItem} in {LeagueId} league", item, leagueId);
-
-                        // Execute the API request
                         var result = await _tradeService.SearchCurrencyExchangeAsync(leagueId, haveCurrencies, item, minimum);
 
-                        _logger.LogDebug("Found {TotalResults} results for {TradeItem}", result.total, item);
+                        tradeDataBatch.Add(new { Item = item, Data = result });
+                        _logger.LogDebug("Collected trade data for {TradeItem}", item);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error occurred while searching for trade item: {TradeItem}", item);
                     }
                 }
+
+                if (tradeDataBatch.Any())
+                {
+                    _logger.LogDebug("Completed processing {EnumType}. Sending data to Kafka topic '{Topic}'", tradeItemType.Name, topic);
+                    await _kafkaProducer.SendMessageAsync(topic, "trade-data-refresh", tradeDataBatch);
+                    _logger.LogDebug("Trade data sent to Kafka topic '{Topic}' successfully.", topic);
+                }
             }
 
-            _logger.LogDebug("Completed iteration through all trade items. Restarting cycle.");
+            _logger.LogDebug("Restarting cycle...");
         }
     }
 
-    /// <summary>
-    /// Retrieves all enum types dynamically from the assembly.
-    /// </summary>
     private static Type[] GetEnumTypes()
     {
-        var enumTypes = Assembly.GetExecutingAssembly()
+        return Assembly.GetExecutingAssembly()
             .GetTypes()
-            .Where(t => t.IsEnum && t.Namespace == "WorkerService1.BulkTradeService.Enums") // Adjust namespace if needed
+            .Where(t => t.IsEnum && t.Namespace == "WorkerService1.BulkTradeService.Enums")
             .ToArray();
-
-        return enumTypes;
     }
 
-    /// <summary>
-    /// Retrieves all enum values for a given enum type and converts them to their API-friendly values.
-    /// </summary>
     private string[] GetEnumValues(Type enumType)
     {
         var values = Enum.GetValues(enumType)
             .Cast<Enum>()
-            .Select(e =>
-            {
-                var value = e.GetEnumMemberValue(); // Get EnumMember value
-                if (string.IsNullOrEmpty(value))
-                {
-                    _logger.LogWarning("Enum value {EnumValue} in {EnumType} does not have an EnumMember attribute, using default name.", e, enumType.Name);
-                    return e.ToString(); // Use default enum name as fallback
-                }
-                return value;
-            })
+            .Select(e => e.GetEnumMemberValue())
             .ToArray();
 
         _logger.LogDebug("Extracted {ValueCount} values from enum {EnumType}: {Values}", 
@@ -108,4 +99,14 @@ public class Worker : BackgroundService
         return values;
     }
 
+    private static string GetKafkaTopic(Type enumType)
+    {
+        return enumType.Name.ToLower() switch
+        {
+            "essence" => "essence",
+            "fossil" => "fossils",
+            "scarab" => "scarabs",
+            _ => "misc"
+        };
+    }
 }

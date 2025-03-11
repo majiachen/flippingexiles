@@ -1,6 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Net.Http.Headers;
 using System.Text;
+using Duende.IdentityModel.Client;
 using Newtonsoft.Json;
 
 namespace WorkerService1.BulkTradeService;
