@@ -14,7 +14,7 @@ public class KafkaProducerService : IDisposable
 
         var config = new ProducerConfig
         {
-            BootstrapServers = "localhost:19092,localhost:19093,localhost:19094",    
+            BootstrapServers = "192.168.0.10:19092,192.168.0.10:19093,192.168.0.10:19094",    
             Debug = "broker,topic,metadata",
             BrokerAddressFamily = BrokerAddressFamily.V4,
             // Important - tell client to only use bootstrap servers
@@ -31,7 +31,7 @@ public class KafkaProducerService : IDisposable
         {
             var enrichedMessage = new
             {
-                Timestamp = DateTime.UtcNow, // Add timestamp for freshness tracking
+                Timestamp = DateTime.Now, // Add timestamp for freshness tracking
                 Data = message
             };
 
