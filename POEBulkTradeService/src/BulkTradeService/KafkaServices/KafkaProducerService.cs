@@ -14,7 +14,7 @@ public class KafkaProducerService : IDisposable
 
         var config = new ProducerConfig
         {
-            BootstrapServers = "kafka1:19092,kafka2:19093,kafka3:19094",    
+            BootstrapServers = "kafka1:9092,kafka2:9093,kafka3:9094",    
             Debug = "broker,topic,metadata",
             BrokerAddressFamily = BrokerAddressFamily.V4,
             // Important - tell client to only use bootstrap servers
