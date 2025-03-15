@@ -67,7 +67,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@96383f45573cb7f253c731d3b3ab81c87ef81934 # v5.0.0
         with:
-          images: jackma/flippingexilesbulktrademimic
+          images: jackma790/flippingexilesbulktrademimic
 
       # Build and push Docker image with Buildx (don't push on PR)
       # https://github.com/docker/build-push-action
@@ -77,7 +77,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          tags: jackma/flippingexilesbulktrademimic:1.0
+          tags: jackma790/flippingexilesbulktrademimic:1.0
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
