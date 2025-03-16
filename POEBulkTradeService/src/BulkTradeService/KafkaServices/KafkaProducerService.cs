@@ -20,7 +20,7 @@ public class KafkaProducerService : IDisposable
             // Important - tell client to only use bootstrap servers
             ApiVersionFallbackMs = 0,
             SocketKeepaliveEnable = true,
-            MessageMaxBytes = 1048576000,
+            MessageMaxBytes = 1000000000,
             CompressionType = CompressionType.Gzip
         };
 
