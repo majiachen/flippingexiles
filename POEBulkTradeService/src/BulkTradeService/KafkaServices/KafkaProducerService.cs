@@ -19,7 +19,9 @@ public class KafkaProducerService : IDisposable
             BrokerAddressFamily = BrokerAddressFamily.V4,
             // Important - tell client to only use bootstrap servers
             ApiVersionFallbackMs = 0,
-            SocketKeepaliveEnable = true
+            SocketKeepaliveEnable = true,
+            MessageMaxBytes = 1048576000,
+            CompressionType = CompressionType.Gzip
         };
 
         _producer = new ProducerBuilder<string, string>(config).Build();
