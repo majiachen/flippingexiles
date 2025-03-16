@@ -37,12 +37,10 @@ public class Worker : BackgroundService
                 var items = GetEnumValues(tradeItemType);
                 var topic = GetKafkaTopic(tradeItemType);
 
-                _logger.LogDebug("Processing {ItemCount} trade items from {EnumType}, sending data to Kafka topic '{Topic}'", 
+                _logger.LogInformation("Processing {ItemCount} trade items from {EnumType}, sending data to Kafka topic '{Topic}'", 
                     items.Length, tradeItemType.Name, topic);
 
                 var tradeDataBatch = new List<object>();
-                await _kafkaProducer.SendMessageAsync(topic, "trade-data-refresh", tradeDataBatch);
-                _logger.LogDebug("test Trade data sent to Kafka topic '{Topic}' successfully.", topic);
                 foreach (var item in items)
                 {
                     try
@@ -68,13 +66,12 @@ public class Worker : BackgroundService
 
                 if (tradeDataBatch.Any())
                 {
-                    _logger.LogDebug("Completed processing {EnumType}. Sending data to Kafka topic '{Topic}'", tradeItemType.Name, topic);
+                    _logger.LogInformation("Completed processing {EnumType}. Sending data to Kafka topic '{Topic}'", tradeItemType.Name, topic);
                     await _kafkaProducer.SendMessageAsync(topic, "trade-data-refresh", tradeDataBatch);
-                    _logger.LogDebug("Trade data sent to Kafka topic '{Topic}' successfully.", topic);
                 }
             }
 
-            _logger.LogDebug("Restarting cycle...");
+            _logger.LogInformation("Restarting cycle...");
         }
     }
 
