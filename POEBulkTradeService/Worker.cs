@@ -40,7 +40,6 @@ public class Worker : BackgroundService
                 _logger.LogInformation("Processing {ItemCount} trade items from {EnumType}, sending data to Kafka topic '{Topic}'", 
                     items.Length, tradeItemType.Name, topic);
 
-                var tradeDataBatch = new List<object>();
                 foreach (var item in items)
                 {
                     try
@@ -55,19 +54,13 @@ public class Worker : BackgroundService
                         _logger.LogDebug("Searching for {TradeItem} in {LeagueId} league", item, leagueId);
                         var result = await _tradeService.SearchCurrencyExchangeAsync(leagueId, haveCurrencies, item, minimum);
 
-                        tradeDataBatch.Add(new { Item = item, Data = result });
-                        _logger.LogDebug("Collected trade data for {TradeItem}", item);
+                        await _kafkaProducer.SendMessageAsync(topic,item , result);
+                        _logger.LogInformation("Collected trade data and sent to kafka for {TradeItem}", item);
                     }
                     catch (Exception ex)
                     {
                         _logger.LogError(ex, "Error occurred while searching for trade item: {TradeItem}", item);
                     }
-                }
-
-                if (tradeDataBatch.Any())
-                {
-                    _logger.LogInformation("Completed processing {EnumType}. Sending data to Kafka topic '{Topic}'", tradeItemType.Name, topic);
-                    await _kafkaProducer.SendMessageAsync(topic, "trade-data-refresh", tradeDataBatch);
                 }
             }
 
