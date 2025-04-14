@@ -18,7 +18,6 @@ public enum Fossil
     [EnumMember(Value = "lucent-fossil")] LucentFossil,
     [EnumMember(Value = "shuddering-fossil")] ShudderingFossil,
     [EnumMember(Value = "bound-fossil")] BoundFossil,
-    [EnumMember(Value = "perfect-fossil")] PerfectFossil,
     [EnumMember(Value = "deft-fossil")] DeftFossil,
     [EnumMember(Value = "fundamental-fossil")] FundamentalFossil,
     [EnumMember(Value = "faceted-fossil")] FacetedFossil,
