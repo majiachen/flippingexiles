@@ -28,7 +28,5 @@ public enum Fossil
     [EnumMember(Value = "glyphic-fossil")] GlyphicFossil,
     [EnumMember(Value = "tangled-fossil")] TangledFossil,
     [EnumMember(Value = "sanctified-fossil")] SanctifiedFossil,
-    [EnumMember(Value = "gilded-fossil")] GildedFossil,
-    [EnumMember(Value = "enchanted-fossil")] EnchantedFossil,
-    [EnumMember(Value = "primeval-fossil")] PrimevalFossil
+    [EnumMember(Value = "gilded-fossil")] GildedFossil
 }
